@@ -70,7 +70,8 @@ val commonSettings = Seq(
   ),
   parallelExecution in Test := false,
   testOptions in Test += Tests.Argument("-oDS"),
-  testOptions in Travis += Tests.Argument("-l", "org.scalatest.tags.Slow")
+  testOptions in Travis += Tests.Argument("-l", "org.scalatest.tags.Slow"),
+  ivyLoggingLevel := UpdateLogging.Quiet // ivy resolving is too noisy
 ) ++ inConfig(Travis)(Defaults.testTasks)
 
 lazy val `akka-persistence-mongo-common` = (project in file("common"))
