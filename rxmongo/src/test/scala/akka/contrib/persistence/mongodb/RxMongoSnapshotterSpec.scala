@@ -12,6 +12,7 @@ import akka.serialization.{Serialization, SerializationExtension}
 import akka.testkit._
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
+import reactivemongo.api.Cursor.{ErrorHandler, FailOnError}
 import reactivemongo.bson.BSONDocument
 
 import scala.concurrent._
@@ -33,9 +34,9 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
 
       val metadata = (1L to 10L).map(i => SnapshotMetadata("p-1", i, i))
       val snapshots = metadata.map(SelectedSnapshot(_, "snapshot"))
-      val legacyDocs = snapshots.map(serializer.legacyWrite)
+      val legacyDocs = snapshots.map(serializer.write)
 
-      Await.result(ss.bulkInsert(legacyDocs.toStream, ordered = true), 3.seconds.dilated).n should be(metadata.size)
+      Await.result(ss.insert[BSONDocument](ordered=true).many(legacyDocs), 3.seconds.dilated).n should be(metadata.size)
 
       val extracted = ss.find(BSONDocument()).cursor[SelectedSnapshot]().collect[List](stopOnError = true)
       val result = Await.result(extracted, 3.seconds.dilated)
@@ -52,12 +53,12 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
       val snapshots = metadata.map(SelectedSnapshot(_, "snapshot"))
       val legacyDocs = snapshots.map(serializer.legacyWrite)
 
-      Await.result(ss.bulkInsert(legacyDocs.toStream, ordered = true), 3.seconds.dilated).n should be(metadata.size)
+      Await.result(ss.insert[BSONDocument](ordered=true).many(legacyDocs), 3.seconds.dilated).n should be(metadata.size)
 
       // should 'retrieve' (and not 'build') the suffixed snapshot 
       val snapsName = extendedDriver.getSnapsCollectionName(pid)
       snapsName should be("akka_persistence_snaps_unit-test-test")
-      val collections = Await.result(extendedDriver.db.flatMap(_.collectionNames), 3.seconds.dilated)
+      val collections = Await.result(extendedDriver.database.flatMap(_.collectionNames), 3.seconds.dilated)
       collections.contains(snapsName) should be (true)
 
       val extracted = ss.find(BSONDocument()).cursor[SelectedSnapshot]().collect[List](stopOnError = true)
@@ -76,7 +77,7 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
       val legacyDocs = snapshots.take(5).map(serializer.legacyWrite)
       val newDocs = snapshots.drop(5).map(serializer.write)
 
-      Await.result(ss.bulkInsert((legacyDocs ++ newDocs).toStream, ordered = true), 3.seconds.dilated).n should be(metadata.size)
+      Await.result(ss.insert[BSONDocument](ordered=true).many(legacyDocs ++ newDocs), 3.seconds.dilated).n should be(metadata.size)
 
       val extracted = ss.find(BSONDocument()).cursor[SelectedSnapshot]().collect[List](stopOnError = true)
       val result = Await.result(extracted, 3.seconds.dilated.dilated)
@@ -96,11 +97,11 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
       val legacyDocs = snapshots.take(5).map(serializer.legacyWrite)
       val newDocs = snapshots.drop(5).map(serializer.write)
 
-      Await.result(ss.bulkInsert((legacyDocs ++ newDocs).toStream, ordered = true), 3.seconds.dilated).n should be(metadata.size)
-       
+      Await.result(ss.insert[BSONDocument](ordered=true).many(legacyDocs ++ newDocs), 3.seconds.dilated).n should be(metadata.size)
+
       val snapsName = extendedDriver.getSnapsCollectionName(pid)
       snapsName should be("akka_persistence_snaps_unit-test-test")
-      val collections = Await.result(extendedDriver.db.flatMap(_.collectionNames), 3.seconds.dilated)
+      val collections = Await.result(extendedDriver.database.flatMap(_.collectionNames), 3.seconds.dilated)
       collections.contains(snapsName) should be (true)
       
       val extracted = ss.find(BSONDocument()).cursor[SelectedSnapshot]().collect[List](stopOnError = true)
@@ -119,16 +120,17 @@ class RxMongoSnapshotterSpec extends TestKit(ActorSystem("unit-test")) with RxMo
       val underExtendedTest = new RxMongoSnapshotter(drv)
       
       // should 'build' the suffixed snapshot
-      Await.ready(new RxMongoSnapshotter(drv).saveSnapshot(SelectedSnapshot(SnapshotMetadata(pid, 4, 1000), "snapshot-payload")), 3.seconds)
+      Await.ready(new RxMongoSnapshotter(drv).saveSnapshot(SelectedSnapshot(SnapshotMetadata(persistenceId = pid, sequenceNr = 4, timestamp = 1000), "snapshot-payload")), 3.seconds)
 
       // should 'retrieve' (and not 'build') the suffixed snapshot 
       val snapsName = drv.getSnapsCollectionName(pid)
       snapsName should be("akka_persistence_snaps_unit-test-test")
-      val collections = Await.result(drv.db.flatMap(_.collectionNames), 3.seconds.dilated)
+      val collections = Await.result(drv.database.flatMap(_.collectionNames), 3.seconds.dilated)
       collections.contains(snapsName) should be (true)
       val ss = drv.getSnaps(pid)
 
-      val extracted = ss.flatMap(_.find(BSONDocument()).cursor[SelectedSnapshot]().collect[List](stopOnError = true))
+      val errorHandler: ErrorHandler[List[SelectedSnapshot]] = FailOnError[List[SelectedSnapshot]](callback = (_, throwable) => { println("WTF ")})
+      val extracted = ss.flatMap(_.find(BSONDocument()).cursor[SelectedSnapshot]().collect[List](-1, errorHandler))
       val result = Await.result(extracted, 3.seconds.dilated)
       result.size should be(1)
       result.head.metadata.persistenceId should be(pid)

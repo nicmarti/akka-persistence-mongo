@@ -28,10 +28,10 @@ trait RxMongoPersistenceSpec extends MongoPersistenceSpec[RxMongoDriver, BSONCol
   }
 
   val driver = new SpecDriver
-  lazy val specDb: Future[DefaultDB] = driver.db
+  lazy val specDb: Future[DefaultDB] = driver.database
 
   val extendedDriver = new ExtendedSpecDriver
-  lazy val extendedSpecDb: Future[DefaultDB] = extendedDriver.db
+  lazy val extendedSpecDb: Future[DefaultDB] = extendedDriver.database
 
   def withCollection(name: String)(testCode: BSONCollection => Any): Unit = {
     for {

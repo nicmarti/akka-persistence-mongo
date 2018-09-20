@@ -31,7 +31,7 @@ class RxMongoDatabaseConfigSpec extends BaseUnitTest with ContainerMongo with Be
 
   "Persistence store database config" should "be User-Specified-Database" in withConfig(config, "akka-contrib-mongodb-persistence-journal") { case (actorSystem, c) =>
     val underTest = new RxMongoDriver(actorSystem, c, new RxMongoDriverProvider(actorSystem))
-    assertResult("User-Specified-Database")(underTest.db.futureValue.name)
+    assertResult("User-Specified-Database")(underTest.database.futureValue.name)
     ()
   }
 }
