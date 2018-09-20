@@ -57,16 +57,17 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
 
   private def rxSettings = RxMongoDriverSettings(system.settings)
 
-  private[mongodb]  def database: Future[DefaultDB] = {
-    implicit val ec:ExecutionContext = system.dispatcher.prepare()
-    for {
-      uri <- Future.fromTry(MongoConnection.parseURI(mongoUri))
-      con =  driverProvider.driver.connection(uri)
-      dn <- Future(uri.db.get)
-      db <- con.database(dn)
-    } yield {
-      println(s"Connecting to ${db.name} with uri ${uri.db} ${uri.hosts.mkString(",")}")
+  private[this] lazy val parsedMongoUri: MongoConnection.ParsedURI = MongoConnection.parseURI(mongoUri) match {
+    case Success(parsed) => parsed
+    case Failure(throwable) => throw throwable
+  }
 
+  private[mongodb] def dbName: String = databaseName.getOrElse(parsedMongoUri.db.getOrElse(DEFAULT_DB_NAME))
+
+  private[mongodb] def database(implicit ec: ExecutionContext = system.dispatcher): Future[DefaultDB] = {
+    for {
+      db <- driverProvider.driver.connection(parsedMongoUri).database(dbName, failoverStrategy)
+    } yield {
       db
     }
   }
@@ -192,6 +193,9 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
   }
 
   override private[mongodb] def cappedCollection(name: String)(implicit ec: ExecutionContext): Future[BSONCollection] = {
+
+    println(s"cappedCollection ${name}")
+
     collection(name).flatMap { cc =>
       cc.stats().flatMap { s =>
         if (!s.capped) cc.convertToCapped(realtimeCollectionSize, None)
@@ -223,16 +227,16 @@ class RxMongoDriver(system: ActorSystem, config: Config, driverProvider: RxMongo
         name.startsWith("system.")
 
     for {
-      ldb  <- database
-      names     <- ldb.collectionNames
-      list      <- Future.sequence(names.filterNot(excluded).filter(nameFilter.getOrElse(_ => true)).map(collection))
+      ldb <- database
+      names <- ldb.collectionNames
+      list <- Future.sequence(names.filterNot(excluded).filter(nameFilter.getOrElse(_ => true)).map(collection))
     } yield list
   }
 
   private[mongodb] def journalCollectionsAsFuture(implicit ec: ExecutionContext) = getCollectionsAsFuture(journalCollectionName)
-  
+
   private[mongodb] def getSnapshotCollections()(implicit ec: ExecutionContext) = getCollections(snapsCollectionName)
-  
+
 }
 
 class RxMongoPersistenceExtension(actorSystem: ActorSystem) extends MongoPersistenceExtension {

@@ -6,13 +6,8 @@ import org.junit.runner.RunWith
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.junit.JUnitRunner
+import org.scalatest.time.{Millis, Seconds, Span}
 
-/**
-  * RxMongo database config spec
-  * @author  wanglei
-  * @since   15-11-28
-  * @version 1.0
-  */
 @RunWith(classOf[JUnitRunner])
 class RxMongoDatabaseConfigSpec extends BaseUnitTest with ContainerMongo with BeforeAndAfterAll with ScalaFutures {
 
@@ -31,7 +26,9 @@ class RxMongoDatabaseConfigSpec extends BaseUnitTest with ContainerMongo with Be
 
   "Persistence store database config" should "be User-Specified-Database" in withConfig(config, "akka-contrib-mongodb-persistence-journal") { case (actorSystem, c) =>
     val underTest = new RxMongoDriver(actorSystem, c, new RxMongoDriverProvider(actorSystem))
-    assertResult("User-Specified-Database")(underTest.database.futureValue.name)
-    ()
+    whenReady(underTest.database, timeout(Span(6, Seconds)), interval(Span(500, Millis))) { db =>
+      db.name should be("User-Specified-Database")
+    }
   }
+
 }
