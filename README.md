@@ -32,3 +32,24 @@
 * Cross compiled 2.10/2.11 - Java 7 targeted
 * No enhancements going forward, bugfixes will continue
 * Latest release - `0.4.2`
+
+### How to test locally ?
+
+If you want to contribute, you might want to execute the suite of Tests locally. However, if you just run "sbt test" it will not work. 
+First, be sure to start Docker using the test_container.sh shell script. This script will start 2 MongoDB. 
+One with authentication and another one, without authentication.
+
+When you run the test suite, there are 2 options which are important. If you run locally and not all tests are successful, 
+try to execute the tests with `-Dakka.test.timefactor=3`. See the [timefactor documentation here](https://doc.akka.io/api/akka/2.0/akka/testkit/TestKit.html).
+
+You can also skip slow tests with org.scalatest.tags.Slow
+```
+sbt "test-only * -- -l org.scalatest.tags.Slow" 
+```
+
+If you want to combine both :
+
+```
+sbt -Dakka.test.timefactor=3 "test-only * -- -l org.scalatest.tags.Slow"
+```
+
